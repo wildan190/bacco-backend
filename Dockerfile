@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/php:8.3-fpm-alpine
+FROM public.ecr.aws/docker/library/php:8.4-fpm-alpine
 
 # Set working directory
 WORKDIR /var/www/html
