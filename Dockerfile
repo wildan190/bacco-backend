@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM php:8.4-fpm-alpine
+FROM public.ecr.aws/docker/library/php:8.4-fpm-alpine
 
 # Set working directory
 WORKDIR /var/www/html
@@ -11,7 +11,7 @@ RUN apk add --no-cache \
     curl \
     mysql-client
 
-# 2. Install PHP extensions cepat via binary installer (tanpa compile manual yang lama)
+# 2. Install PHP extensions cepat (tanpa intl yang memakan waktu compile C++ 8-10 menit)
 COPY --from=mlocati/php-extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions \
     pdo_mysql \
@@ -20,11 +20,10 @@ RUN install-php-extensions \
     exif \
     gd \
     opcache \
-    pcntl \
-    intl
+    pcntl
 
-# 3. Salin binary Composer langsung tanpa curl ke getcomposer.org
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+# 3. Salin binary Composer langsung dari mirror AWS ECR (bebas rate-limit)
+COPY --from=public.ecr.aws/docker/library/composer:2 /usr/bin/composer /usr/bin/composer
 
 ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_MEMORY_LIMIT=-1
