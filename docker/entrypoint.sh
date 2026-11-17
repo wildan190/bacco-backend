@@ -25,12 +25,18 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     php /var/www/html/artisan migrate --force || echo "Warning: Migration failed or database not ready yet."
 fi
 
-# Package discovery and optimization caches
-echo "==> Discovering packages and caching configuration, routes, and views..."
+# Package discovery and configuration cache (do NOT route:cache due to closure routes & Scramble)
+echo "==> Clearing route/view cache and preparing config..."
+php /var/www/html/artisan route:clear || true
+php /var/www/html/artisan view:clear || true
 php /var/www/html/artisan package:discover --ansi || true
 php /var/www/html/artisan config:cache || true
-php /var/www/html/artisan route:cache || true
-php /var/www/html/artisan view:cache || true
+
+# Final permission fix: ensure all files created by root above are fully accessible by www-data
+touch /var/www/html/storage/logs/laravel.log
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+chmod 664 /var/www/html/storage/logs/laravel.log
 
 echo "==> Starting Supervisord (Nginx + PHP-FPM + Laravel Queue Worker)..."
 exec "$@"
