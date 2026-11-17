@@ -5,14 +5,16 @@ services:
       dockerfile: Dockerfile
     container_name: bacco-backend
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "${APP_PORT:-8008}:80"
     environment:
       APP_NAME: "${APP_NAME:-BaccoSales}"
       APP_ENV: "${APP_ENV:-production}"
-      APP_KEY: "${APP_KEY:-}"
+      APP_KEY: ${APP_KEY}
       APP_DEBUG: "${APP_DEBUG:-false}"
-      APP_URL: "${APP_URL:-https://api-bacco.phoenixtech.web.id}"
+      APP_URL: "${APP_URL:-https://phoenixtech.web.id}"
       DB_CONNECTION: mysql
       DB_HOST: "${DB_HOST:-mysql}"
       DB_PORT: "${DB_PORT:-3306}"
@@ -27,13 +29,13 @@ services:
       REDIS_CLIENT: predis
       REDIS_HOST: "${REDIS_HOST:-redis}"
       REDIS_PORT: "${REDIS_PORT:-6379}"
-      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       FILESYSTEM_DISK: "${FILESYSTEM_DISK:-s3}"
-      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
-      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
       AWS_BUCKET: "${AWS_BUCKET:-huntr-dev}"
-      AWS_ENDPOINT: "${AWS_ENDPOINT:-https://s3.nevaobjects.id}"
+      AWS_ENDPOINT: "${AWS_ENDPOINT:-https://nevaobjects.id}"
       AWS_USE_PATH_STYLE_ENDPOINT: "true"
       RUN_MIGRATIONS: "true"
     depends_on:
