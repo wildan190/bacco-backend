@@ -1,0 +1,17 @@
+# Configuration for Coolify when deployed using Nixpacks
+[phases.setup]
+nixPkgs = ["php83", "php83Packages.composer", "php83Extensions.pdo_mysql", "php83Extensions.bcmath", "php83Extensions.gd", "php83Extensions.exif", "php83Extensions.zip", "nginx", "supervisor"]
+
+[phases.install]
+cmds = ["composer install --no-dev --optimize-autoloader --no-interaction"]
+
+[phases.build]
+cmds = [
+  "php artisan storage:link || true",
+  "php artisan config:cache || true",
+  "php artisan route:cache || true",
+  "php artisan view:cache || true"
+]
+
+[start]
+cmd = "exec /usr/local/bin/entrypoint.sh /usr/bin/supervisord -c /etc/supervisord.conf"

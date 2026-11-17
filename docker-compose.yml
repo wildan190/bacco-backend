@@ -1,0 +1,72 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bacco-backend
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:80"
+    environment:
+      APP_NAME: "${APP_NAME:-BaccoSales}"
+      APP_ENV: "${APP_ENV:-production}"
+      APP_KEY: "${APP_KEY}"
+      APP_DEBUG: "${APP_DEBUG:-false}"
+      APP_URL: "${APP_URL:-https://api-bacco.phoenixtech.web.id}"
+      DB_CONNECTION: mysql
+      DB_HOST: "${DB_HOST:-mysql}"
+      DB_PORT: "${DB_PORT:-3306}"
+      DB_DATABASE: "${DB_DATABASE:-db_bacco_sales_track_app}"
+      DB_USERNAME: "${DB_USERNAME:-bacco_user}"
+      DB_PASSWORD: "${DB_PASSWORD:-bacco_secret}"
+      CACHE_STORE: redis
+      SESSION_DRIVER: database
+      QUEUE_CONNECTION: redis
+      REDIS_CLIENT: predis
+      REDIS_HOST: "${REDIS_HOST:-redis}"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-null}"
+      FILESYSTEM_DISK: "${FILESYSTEM_DISK:-s3}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_BUCKET: "${AWS_BUCKET:-huntr-dev}"
+      AWS_ENDPOINT: "${AWS_ENDPOINT:-https://s3.nevaobjects.id}"
+      AWS_USE_PATH_STYLE_ENDPOINT: "true"
+      RUN_MIGRATIONS: "true"
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - bacco-network
+
+  mysql:
+    image: mysql:8.0
+    container_name: bacco-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: "${DB_DATABASE:-db_bacco_sales_track_app}"
+      MYSQL_USER: "${DB_USERNAME:-bacco_user}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:-bacco_secret}"
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:-bacco_root_secret}"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - bacco-network
+
+  redis:
+    image: redis:alpine
+    container_name: bacco-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - bacco-network
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  bacco-network:
+    driver: bridge
