@@ -50,14 +50,14 @@ COPY . .
 # Complete composer dump-autoload with optimization (no scripts during build; discovery is done in entrypoint)
 RUN composer dump-autoload --optimize --no-dev --no-interaction --no-scripts --ignore-platform-reqs
 
-# Ensure storage directories exist and set correct permissions
+# Ensure storage directories exist and set correct permissions (storage & cache only, avoid slow chown on vendor)
 RUN mkdir -p storage/framework/cache/data \
              storage/framework/sessions \
              storage/framework/views \
              storage/logs \
              bootstrap/cache \
-    && chown -R www-data:www-data /var/www/html \
-    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
 
 # Copy custom configuration files
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
