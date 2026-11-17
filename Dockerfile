@@ -47,8 +47,15 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-in
 # Copy application source code
 COPY . .
 
-# Complete composer dump-autoload with optimization
-RUN composer dump-autoload --optimize --no-dev --no-interaction \
+# Complete composer dump-autoload with optimization (no scripts during build; discovery is done in entrypoint)
+RUN composer dump-autoload --optimize --no-dev --no-interaction --no-scripts --ignore-platform-reqs
+
+# Ensure storage directories exist and set correct permissions
+RUN mkdir -p storage/framework/cache/data \
+             storage/framework/sessions \
+             storage/framework/views \
+             storage/logs \
+             bootstrap/cache \
     && chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 

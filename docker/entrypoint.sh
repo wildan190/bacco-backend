@@ -25,8 +25,9 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     php /var/www/html/artisan migrate --force || echo "Warning: Migration failed or database not ready yet."
 fi
 
-# Optimization caches
-echo "==> Caching configuration, routes, and views..."
+# Package discovery and optimization caches
+echo "==> Discovering packages and caching configuration, routes, and views..."
+php /var/www/html/artisan package:discover --ansi || true
 php /var/www/html/artisan config:cache || true
 php /var/www/html/artisan route:cache || true
 php /var/www/html/artisan view:cache || true
