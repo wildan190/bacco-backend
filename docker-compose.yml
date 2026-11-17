@@ -38,6 +38,12 @@ services:
       AWS_ENDPOINT: "${AWS_ENDPOINT:-https://nevaobjects.id}"
       AWS_USE_PATH_STYLE_ENDPOINT: "true"
       RUN_MIGRATIONS: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1/up || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     depends_on:
       - mysql
       - redis
@@ -48,6 +54,12 @@ services:
     image: public.ecr.aws/docker/library/mysql:8.0
     container_name: bacco-mysql
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD:-bacco_root_secret} || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     environment:
       MYSQL_DATABASE: "${DB_DATABASE:-db_bacco_sales_track_app}"
       MYSQL_USER: "${DB_USERNAME:-bacco_user}"
@@ -62,6 +74,12 @@ services:
     image: public.ecr.aws/docker/library/redis:alpine
     container_name: bacco-redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     volumes:
       - redis_data:/data
     networks:
