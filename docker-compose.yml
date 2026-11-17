@@ -41,7 +41,7 @@ services:
       - bacco-network
 
   mysql:
-    image: mysql:8.0
+    image: public.ecr.aws/docker/library/mysql:8.0
     container_name: bacco-mysql
     restart: unless-stopped
     environment:
@@ -55,7 +55,7 @@ services:
       - bacco-network
 
   redis:
-    image: redis:alpine
+    image: public.ecr.aws/docker/library/redis:alpine
     container_name: bacco-redis
     restart: unless-stopped
     volumes:
