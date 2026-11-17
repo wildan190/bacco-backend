@@ -6,7 +6,7 @@ services:
     container_name: bacco-backend
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-8000}:80"
+      - "${APP_PORT:-8008}:80"
     environment:
       APP_NAME: "${APP_NAME:-BaccoSales}"
       APP_ENV: "${APP_ENV:-production}"
