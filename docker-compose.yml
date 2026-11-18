@@ -14,7 +14,7 @@ services:
       APP_ENV: "${APP_ENV:-production}"
       APP_KEY: "${APP_KEY:-base64:OGth0tQGzl4SbKoBe4rHAu8UGossysxfmJmw/dsdQnk=}"
       APP_DEBUG: "${APP_DEBUG:-false}"
-      APP_URL: "${APP_URL:-https://phoenixtech.web.id}"
+      APP_URL: "${APP_URL:-https://api-bacco.phoenixtech.web.id}"
       DB_CONNECTION: mysql
       DB_HOST: "${DB_HOST:-mysql}"
       DB_PORT: "${DB_PORT:-3306}"
@@ -35,7 +35,7 @@ services:
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-1gabnDE08W1VoeLfXuVEkzPx6J4aXbQp7HLJJcgY}"
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
       AWS_BUCKET: "${AWS_BUCKET:-huntr-dev}"
-      AWS_ENDPOINT: "${AWS_ENDPOINT:-https://nevaobjects.id}"
+      AWS_ENDPOINT: "${AWS_ENDPOINT:-https://s3.nevaobjects.id}"
       AWS_USE_PATH_STYLE_ENDPOINT: "true"
       RUN_MIGRATIONS: "true"
     healthcheck:

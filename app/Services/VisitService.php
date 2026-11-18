@@ -13,7 +13,6 @@ use Illuminate\Pagination\LengthAwarePaginator as ConcretePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class VisitService
@@ -211,82 +210,78 @@ class VisitService
         $disk ??= PhotoStorage::disk();
         $fileName = 'visits/'.Str::uuid().'.jpg';
 
+        $binary = $file instanceof UploadedFile ? file_get_contents($file->getRealPath()) : $file;
+        if (empty($binary)) {
+            return null;
+        }
+
+        // Only the compression is best-effort; storing must never fail silently.
+        $payload = null;
+
         try {
-            $binary = $file instanceof UploadedFile ? file_get_contents($file->getRealPath()) : $file;
-            if (empty($binary)) {
-                return null;
-            }
-
-            // Create GD image from binary string
             $source = @imagecreatefromstring($binary);
-            if (! $source) {
-                // Fallback to storing directly if GD cannot decode
-                if ($file instanceof UploadedFile) {
-                    return $file->store('visits', $disk);
-                }
-                Storage::disk($disk)->put($fileName, $binary, 'public');
-                return $fileName;
-            }
-
-            // Correct EXIF orientation if available (from phone cameras)
-            if ($file instanceof UploadedFile && function_exists('exif_read_data')) {
-                try {
-                    $exif = @exif_read_data($file->getRealPath());
-                    if (! empty($exif['Orientation'])) {
-                        switch ($exif['Orientation']) {
-                            case 3:
-                                $source = imagerotate($source, 180, 0);
-                                break;
-                            case 6:
-                                $source = imagerotate($source, -90, 0);
-                                break;
-                            case 8:
-                                $source = imagerotate($source, 90, 0);
-                                break;
+            if ($source) {
+                // Correct EXIF orientation if available (from phone cameras)
+                if ($file instanceof UploadedFile && function_exists('exif_read_data')) {
+                    try {
+                        $exif = @exif_read_data($file->getRealPath());
+                        if (! empty($exif['Orientation'])) {
+                            switch ($exif['Orientation']) {
+                                case 3:
+                                    $source = imagerotate($source, 180, 0);
+                                    break;
+                                case 6:
+                                    $source = imagerotate($source, -90, 0);
+                                    break;
+                                case 8:
+                                    $source = imagerotate($source, 90, 0);
+                                    break;
+                            }
                         }
+                    } catch (\Throwable) {
+                        // Ignore EXIF errors
                     }
-                } catch (\Throwable) {
-                    // Ignore EXIF errors
-                }
-            }
-
-            $origWidth = imagesx($source);
-            $origHeight = imagesy($source);
-
-            $maxDim = 1200;
-            if ($origWidth > $maxDim || $origHeight > $maxDim) {
-                if ($origWidth >= $origHeight) {
-                    $newWidth = $maxDim;
-                    $newHeight = (int) round(($origHeight / $origWidth) * $maxDim);
-                } else {
-                    $newHeight = $maxDim;
-                    $newWidth = (int) round(($origWidth / $origHeight) * $maxDim);
                 }
 
-                $resized = imagecreatetruecolor($newWidth, $newHeight);
-                imagecopyresampled($resized, $source, 0, 0, 0, 0, $newWidth, $newHeight, $origWidth, $origHeight);
+                $origWidth = imagesx($source);
+                $origHeight = imagesy($source);
+
+                $maxDim = 1200;
+                if ($origWidth > $maxDim || $origHeight > $maxDim) {
+                    if ($origWidth >= $origHeight) {
+                        $newWidth = $maxDim;
+                        $newHeight = (int) round(($origHeight / $origWidth) * $maxDim);
+                    } else {
+                        $newHeight = $maxDim;
+                        $newWidth = (int) round(($origWidth / $origHeight) * $maxDim);
+                    }
+
+                    $resized = imagecreatetruecolor($newWidth, $newHeight);
+                    imagecopyresampled($resized, $source, 0, 0, 0, 0, $newWidth, $newHeight, $origWidth, $origHeight);
+                    imagedestroy($source);
+                    $source = $resized;
+                }
+
+                // Compress as JPEG quality 70
+                ob_start();
+                imagejpeg($source, null, 70);
+                $payload = ob_get_clean();
                 imagedestroy($source);
-                $source = $resized;
             }
-
-            // Compress as JPEG quality 70
-            ob_start();
-            imagejpeg($source, null, 70);
-            $compressedData = ob_get_clean();
-            imagedestroy($source);
-
-            Storage::disk($disk)->put($fileName, $compressedData, 'public');
-
-            return $fileName;
         } catch (\Throwable $e) {
-            Log::warning('Image compression error in VisitService, falling back to direct save: '.$e->getMessage());
+            Log::warning('Image compression error in VisitService: '.$e->getMessage());
+        }
+
+        // Could not decode/compress (e.g. unsupported format): store the original bytes as-is.
+        if ($payload === null) {
             if ($file instanceof UploadedFile) {
                 return $file->store('visits', $disk);
             }
-            Storage::disk($disk)->put($fileName, is_string($file) ? $file : '', 'public');
 
-            return $fileName;
+            $payload = $binary;
         }
+
+        return PhotoStorage::put($fileName, $payload, $disk);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -32,6 +33,33 @@ class PhotoStorage
         }
 
         return 'public';
+    }
+
+    /**
+     * Write photo contents to the photo disk and fail loudly on error.
+     *
+     * The S3 disk is configured with `throw => false`, so a failed upload
+     * (e.g. an unreachable/mistyped AWS_ENDPOINT) only returns false instead
+     * of raising. Without this guard the caller would keep the DB `photo_path`
+     * pointing at an object that was never written, i.e. "upload succeeds but
+     * the file never lands in object storage".
+     *
+     * @return string The stored path, for convenient chaining.
+     */
+    public static function put(string $path, string $contents, ?string $disk = null): string
+    {
+        $disk ??= self::disk();
+
+        $stored = Storage::disk($disk)->put($path, $contents, 'public');
+
+        if ($stored === false) {
+            $endpoint = config("filesystems.disks.{$disk}.endpoint") ?? '-';
+            Log::error("PhotoStorage: unable to write [{$path}] to disk [{$disk}] (endpoint: {$endpoint}). Check object storage credentials and endpoint.");
+
+            throw new \RuntimeException('Gagal menyimpan foto ke object storage. Periksa konfigurasi penyimpanan.');
+        }
+
+        return $path;
     }
 
     /**
