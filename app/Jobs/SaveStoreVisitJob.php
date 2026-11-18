@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\StoreVisit;
 use App\Models\VisitSchedule;
+use App\Support\PhotoStorage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -39,17 +40,20 @@ class SaveStoreVisitJob implements ShouldQueue
      */
     public function handle(): StoreVisit
     {
-        // If S3 is configured, upload the local file to S3 in the background
-        if (! empty($this->data['photo_path']) && config('filesystems.default') === 's3') {
+        // Legacy safety net: photos uploaded by older deployments lived on the local
+        // "public" disk while URLs are served from another disk (e.g. s3). Move them
+        // across. New uploads already target the URL disk, so this is a no-op for them.
+        $photoDisk = PhotoStorage::disk();
+        $path = $this->data['photo_path'] ?? null;
+        if ($path && $photoDisk !== 'public' && Storage::disk('public')->exists($path)) {
             try {
-                if (Storage::disk('public')->exists($this->data['photo_path'])) {
-                    $stream = Storage::disk('public')->readStream($this->data['photo_path']);
-                    if ($stream) {
-                        Storage::disk('s3')->writeStream($this->data['photo_path'], $stream, ['visibility' => 'public']);
-                    }
+                $stream = Storage::disk('public')->readStream($path);
+                if ($stream) {
+                    Storage::disk($photoDisk)->writeStream($path, $stream, ['visibility' => 'public']);
                 }
+                Storage::disk('public')->delete($path);
             } catch (\Throwable $e) {
-                Log::warning('S3 background sync in SaveStoreVisitJob: ' . $e->getMessage());
+                Log::warning('Photo sync in SaveStoreVisitJob: ' . $e->getMessage());
             }
         }
 

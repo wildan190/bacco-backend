@@ -6,6 +6,7 @@ use App\Jobs\SaveStoreVisitJob;
 use App\Models\Store;
 use App\Models\StoreVisit;
 use App\Models\User;
+use App\Support\PhotoStorage;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator as ConcretePaginator;
@@ -112,11 +113,13 @@ class VisitService
     public function recordVisit(User $salesUser, array $data): StoreVisit
     {
         $photoPath = null;
-        // Compress & optimize image, store locally on public disk first (<5ms, immune to network/S3 latency)
+        // Store on the same disk PhotoStorage builds URLs from, so the visit photo
+        // is immediately reachable (no background copy to S3 required).
+        $photoDisk = PhotoStorage::disk();
         if (! empty($data['photo']) && $data['photo'] instanceof UploadedFile) {
-            $photoPath = $this->compressAndStorePhoto($data['photo'], 'public');
+            $photoPath = $this->compressAndStorePhoto($data['photo'], $photoDisk);
         } elseif (! empty($data['photo_base64'])) {
-            $photoPath = $this->saveBase64Photo($data['photo_base64'], 'public');
+            $photoPath = $this->saveBase64Photo($data['photo_base64'], $photoDisk);
         }
 
         $visitedAt = ! empty($data['visited_at']) ? $data['visited_at'] : now();
@@ -203,8 +206,9 @@ class VisitService
      * Store and compress an image file to reduce storage usage and speed up network transfer.
      * Scales image down to max 1200x1200 maintaining aspect ratio and compresses with quality 70.
      */
-    protected function compressAndStorePhoto(UploadedFile|string $file, string $disk = 'public'): ?string
+    protected function compressAndStorePhoto(UploadedFile|string $file, ?string $disk = null): ?string
     {
+        $disk ??= PhotoStorage::disk();
         $fileName = 'visits/'.Str::uuid().'.jpg';
 
         try {
@@ -286,9 +290,9 @@ class VisitService
     }
 
     /**
-     * Save and compress base64 image data to public storage.
+     * Save and compress base64 image data onto the given disk.
      */
-    protected function saveBase64Photo(string $base64String, string $disk = 'public'): ?string
+    protected function saveBase64Photo(string $base64String, ?string $disk = null): ?string
     {
         if (preg_match('/^data:image\/(\w+);base64,/', $base64String, $type)) {
             $data = substr($base64String, strpos($base64String, ',') + 1);

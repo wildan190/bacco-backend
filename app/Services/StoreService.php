@@ -224,10 +224,14 @@ class StoreService
     }
 
     /**
-     * Delete a store.
+     * Delete a store together with its uploaded photo.
      */
     public function deleteStore(Store $store): void
     {
+        if ($store->photo_path) {
+            $this->imageService->delete($store->photo_path);
+        }
+
         $store->delete();
     }
 }

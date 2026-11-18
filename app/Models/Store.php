@@ -2,17 +2,16 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Casts\Attribute;
+use App\Models\Concerns\HasPhotoUrl;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Facades\Storage;
 
 class Store extends Model
 {
-    use HasFactory;
+    use HasFactory, HasPhotoUrl;
 
     protected $fillable = [
         'name',
@@ -38,33 +37,6 @@ class Store extends Model
             'longitude' => 'float',
             'is_active' => 'boolean',
         ];
-    }
-
-    protected function photoUrl(): Attribute
-    {
-        return Attribute::make(
-            get: function () {
-                if (! $this->photo_path) {
-                    return null;
-                }
-
-                // Already a full URL (e.g., previously migrated data)
-                if (str_starts_with($this->photo_path, 'http://') || str_starts_with($this->photo_path, 'https://')) {
-                    return $this->photo_path;
-                }
-
-                $disk = config('filesystems.default', 'public');
-                if ($disk === 's3') {
-                    return Storage::disk('s3')->url($this->photo_path);
-                }
-
-                if (request()) {
-                    return request()->schemeAndHttpHost() . '/storage/' . ltrim($this->photo_path, '/');
-                }
-
-                return Storage::disk('public')->url($this->photo_path);
-            }
-        );
     }
 
     public function creator(): BelongsTo
