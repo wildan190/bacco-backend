@@ -12,6 +12,7 @@ class StoreVisit extends Model
     use HasFactory, HasPhotoUrl;
 
     protected $fillable = [
+        'client_uuid',
         'user_id',
         'store_id',
         'visited_at',

@@ -99,13 +99,28 @@ class OrderService
      */
     public function createPosOrder(User $salesUser, array $data): Order
     {
-        // Enforce rule: Sales must take a visit photo (check-in) today at this store before POS is unlocked!
+        // ── Idempotency Check: return existing order if client_uuid already processed ──
+        if (! empty($data['client_uuid'])) {
+            $existing = Order::where('client_uuid', $data['client_uuid'])->first();
+            if ($existing) {
+                return $existing->load([
+                    'user:id,name,phone',
+                    'store:id,name,address,phone',
+                    'items.product:id,name,sku,price',
+                ]);
+            }
+        }
+
+        $orderDate = ! empty($data['created_at'])
+            ? \Illuminate\Support\Carbon::parse($data['created_at'])->toDateString()
+            : today()->toDateString();
+
+        // Enforce rule: Sales must take a visit photo (check-in) today or on order date at this store!
         if ($salesUser->isSales()) {
-            $today = today()->toDateString();
             $hasVisited = StoreVisit::where('store_id', $data['store_id'])
                 ->where('user_id', $salesUser->id)
-                ->whereDate('visited_at', $today)
-                ->exists() || Cache::has("user_visited_store_{$salesUser->id}_{$data['store_id']}_{$today}");
+                ->whereDate('visited_at', $orderDate)
+                ->exists() || ($orderDate === today()->toDateString() && Cache::has("user_visited_store_{$salesUser->id}_{$data['store_id']}_{$orderDate}"));
 
             if (! $hasVisited) {
                 throw ValidationException::withMessages([
@@ -122,12 +137,18 @@ class OrderService
 
         // ── SALES USER: validate against carried inventory, NOT master stock ─────────
         if ($salesUser->isSales()) {
-            $today = today()->toDateString();
-
             $inventory = SalesInventory::with('items.product')
                 ->where('user_id', $salesUser->id)
-                ->whereDate('date', $today)
+                ->whereDate('date', $orderDate)
                 ->first();
+
+            if (! $inventory) {
+                // Fallback to latest active inventory if date is today
+                $inventory = SalesInventory::with('items.product')
+                    ->where('user_id', $salesUser->id)
+                    ->latest('date')
+                    ->first();
+            }
 
             if (! $inventory) {
                 throw ValidationException::withMessages([
@@ -183,10 +204,13 @@ class OrderService
                 ? (float) $data['cash_paid']
                 : $totalAmount;
             $changeDue     = max(0.0, $cashPaid - $totalAmount);
-            $invoiceNumber = 'INV-'.date('YmdHis').'-'.strtoupper(Str::random(4));
+            $invoiceNumber = ! empty($data['invoice_number'])
+                ? $data['invoice_number']
+                : 'INV-'.date('YmdHis').'-'.strtoupper(Str::random(4));
 
             return DB::transaction(function () use ($salesUser, $data, $invoiceNumber, $totalAmount, $cashPaid, $changeDue, $orderItemsData) {
-                $order = Order::create([
+                $orderPayload = [
+                    'client_uuid'    => $data['client_uuid'] ?? null,
                     'invoice_number' => $invoiceNumber,
                     'user_id'        => $salesUser->id,
                     'store_id'       => $data['store_id'],
@@ -196,7 +220,14 @@ class OrderService
                     'payment_method' => $data['payment_method'] ?? 'cash',
                     'notes'          => $data['notes'] ?? null,
                     'status'         => 'completed',
-                ]);
+                ];
+
+                if (! empty($data['created_at'])) {
+                    $orderPayload['created_at'] = $data['created_at'];
+                    $orderPayload['updated_at'] = $data['created_at'];
+                }
+
+                $order = Order::create($orderPayload);
 
                 foreach ($orderItemsData as $itemData) {
                     $order->items()->create([

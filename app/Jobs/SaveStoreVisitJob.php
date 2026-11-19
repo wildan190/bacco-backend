@@ -57,14 +57,22 @@ class SaveStoreVisitJob implements ShouldQueue
             }
         }
 
+        if (! empty($this->data['client_uuid'])) {
+            $existing = StoreVisit::where('client_uuid', $this->data['client_uuid'])->first();
+            if ($existing) {
+                return $existing;
+            }
+        }
+
         $visit = StoreVisit::create([
-            'user_id'    => $this->data['user_id'],
-            'store_id'   => $this->data['store_id'],
-            'visited_at' => $this->data['visited_at'],
-            'photo_path' => $this->data['photo_path'] ?? null,
-            'notes'      => $this->data['notes'] ?? null,
-            'latitude'   => $this->data['latitude'] ?? null,
-            'longitude'  => $this->data['longitude'] ?? null,
+            'client_uuid' => $this->data['client_uuid'] ?? null,
+            'user_id'     => $this->data['user_id'],
+            'store_id'    => $this->data['store_id'],
+            'visited_at'  => $this->data['visited_at'],
+            'photo_path'  => $this->data['photo_path'] ?? null,
+            'notes'       => $this->data['notes'] ?? null,
+            'latitude'    => $this->data['latitude'] ?? null,
+            'longitude'   => $this->data['longitude'] ?? null,
         ]);
 
         // Auto-complete any pending visit schedule for this user and store today

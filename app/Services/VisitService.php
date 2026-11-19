@@ -111,6 +111,13 @@ class VisitService
      */
     public function recordVisit(User $salesUser, array $data): StoreVisit
     {
+        if (! empty($data['client_uuid'])) {
+            $existing = StoreVisit::where('client_uuid', $data['client_uuid'])->first();
+            if ($existing) {
+                return $existing->load(['user:id,name,phone', 'store:id,name,address']);
+            }
+        }
+
         $photoPath = null;
         // Store on the same disk PhotoStorage builds URLs from, so the visit photo
         // is immediately reachable (no background copy to S3 required).
@@ -129,13 +136,14 @@ class VisitService
         Cache::put("store_visited_{$data['store_id']}_{$today}", true, 86400);
 
         $jobData = [
-            'user_id'    => $salesUser->id,
-            'store_id'   => (int) $data['store_id'],
-            'photo_path' => $photoPath,
-            'notes'      => $data['notes'] ?? null,
-            'latitude'   => isset($data['latitude']) ? (float) $data['latitude'] : null,
-            'longitude'  => isset($data['longitude']) ? (float) $data['longitude'] : null,
-            'visited_at' => $visitedAt instanceof \DateTimeInterface ? $visitedAt->format('Y-m-d H:i:s') : (string) $visitedAt,
+            'client_uuid' => $data['client_uuid'] ?? null,
+            'user_id'     => $salesUser->id,
+            'store_id'    => (int) $data['store_id'],
+            'photo_path'  => $photoPath,
+            'notes'       => $data['notes'] ?? null,
+            'latitude'    => isset($data['latitude']) ? (float) $data['latitude'] : null,
+            'longitude'   => isset($data['longitude']) ? (float) $data['longitude'] : null,
+            'visited_at'  => $visitedAt instanceof \DateTimeInterface ? $visitedAt->format('Y-m-d H:i:s') : (string) $visitedAt,
         ];
 
         // Dispatch to Redis queue job

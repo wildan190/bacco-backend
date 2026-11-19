@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\StoreController;
 use App\Http\Controllers\Api\StoreVisitController;
 use App\Http\Controllers\Api\SalesInventoryController;
+use App\Http\Controllers\Api\SyncController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -55,6 +56,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
     Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     Route::get('/orders/{id}/receipt', [OrderController::class, 'receipt'])->name('orders.receipt');
+
+    // Offline Data Synchronization
+    Route::post('/sync/offline-data', [SyncController::class, 'sync'])->name('sync.offline-data');
 
     // Sales Personal KPI & Target
     Route::get('/sales/my-target', [DashboardController::class, 'salesTarget'])->name('sales.my-target');

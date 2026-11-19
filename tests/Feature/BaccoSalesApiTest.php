@@ -816,4 +816,65 @@ class BaccoSalesApiTest extends TestCase
             ]);
         $tomorrowRes->assertStatus(201);
     }
+
+    /** @test */
+    public function test_offline_data_batch_sync_is_idempotent(): void
+    {
+        $today = today()->toDateString();
+
+        // Give sales2 carried inventory for today
+        $this->actingAs($this->sales2, 'sanctum')
+            ->postJson('/api/sales/inventory', [
+                'date'  => $today,
+                'items' => [
+                    ['product_id' => $this->product->id, 'quantity_carried' => 20],
+                ],
+            ])->assertStatus(201);
+
+        $visitUuid = 'visit-uuid-12345';
+        $orderUuid = 'order-uuid-67890';
+
+        $syncPayload = [
+            'visits' => [
+                [
+                    'client_uuid' => $visitUuid,
+                    'store_id'    => $this->store->id,
+                    'notes'       => 'Offline visit test',
+                    'visited_at'  => now()->toDateTimeString(),
+                ],
+            ],
+            'orders' => [
+                [
+                    'client_uuid'    => $orderUuid,
+                    'invoice_number' => 'INV-OFFLINE-TEST-001',
+                    'store_id'       => $this->store->id,
+                    'cash_paid'      => 100000,
+                    'items'          => [
+                        ['product_id' => $this->product->id, 'quantity' => 2],
+                    ],
+                ],
+            ],
+        ];
+
+        // First sync call
+        $response1 = $this->actingAs($this->sales2, 'sanctum')
+            ->postJson('/api/sync/offline-data', $syncPayload);
+
+        $response1->assertStatus(200)
+            ->assertJsonPath('synced_visits.0.client_uuid', $visitUuid)
+            ->assertJsonPath('synced_orders.0.client_uuid', $orderUuid);
+
+        $this->assertDatabaseHas('store_visits', ['client_uuid' => $visitUuid]);
+        $this->assertDatabaseHas('orders', ['client_uuid' => $orderUuid, 'invoice_number' => 'INV-OFFLINE-TEST-001']);
+
+        // Second sync call (duplicate retry due to network drop)
+        $response2 = $this->actingAs($this->sales2, 'sanctum')
+            ->postJson('/api/sync/offline-data', $syncPayload);
+
+        $response2->assertStatus(200);
+
+        // Ensure ONLY 1 visit & 1 order created in DB
+        $this->assertEquals(1, StoreVisit::where('client_uuid', $visitUuid)->count());
+        $this->assertEquals(1, Order::where('client_uuid', $orderUuid)->count());
+    }
 }
