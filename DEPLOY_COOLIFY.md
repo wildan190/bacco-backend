@@ -1,64 +1,76 @@
-# Panduan Deploy Bacco Backend di Coolify & GitHub Actions
+# Panduan Deploy Bacco Backend (CI/CD via GitHub Actions + Coolify)
 
-Backend Laravel 11 ini telah dikonfigurasi penuh untuk di-deploy ke **Coolify** menggunakan Docker / Docker Compose dengan batasan resource ketat (**RAM < 700MB, CPU < 1 Core, Redis hemat memory, dan Queue 1 worker**).
-
----
-
-## 1. Alokasi Resource & Optimasi Performa
-
-Stack ini dikunci agar **RAM tidak pernah tembus 700MB** dan **CPU tidak melebihi 1 Core**:
-
-| Komponen | Batasan RAM | Batasan CPU | Optimasi Khusus |
-|---|---|---|---|
-| **PHP-FPM** | ~40MB - 120MB | Max 0.7 Core (shared) | Pool mode `ondemand` (max 4 children), timeout idle 10s otomatis dibunuh jika tidak ada request. Memory limit script 128MB. |
-| **OPcache** | 64MB | - | Memory consumption dipangkas dari 128MB ke 64MB (cukup untuk seluruh route & class Laravel 11). CLI OPcache dimatikan. |
-| **Nginx** | ~10MB | < 0.05 Core | Event epoll, worker processes auto, fastcgi buffer efisien. |
-| **Laravel Queue** | Max 64MB | < 0.15 Core | **1 Worker saja** (`numprocs=1`), opsi `--sleep=3 --rest=1 --memory=64 --max-jobs=100` agar CPU tidak spike dan memory leak ter-recycle berkala. |
-| **Redis** | Max 48MB | Max 0.15 Core | `--maxmemory 48mb`, policy `allkeys-lru` (auto hapus cache usang saat penuh), snapshot disk RDB dimatikan (`--save ""`) untuk mencegah forking memory 2x lipat. |
-| **Container Hard Limits** | **450MB (App) + 64MB (Redis)** | **Max 0.70 Core (App)** | Dibatasi via Docker Compose `deploy.resources.limits`. |
+Arsitektur ini memindahkan **100% proses build & kompilasi Docker ke GitHub Actions** (runner cloud gratis GitHub). Server VPS Coolify **TIDAK PERNAH NGE-BUILD**, hanya melakukan `docker pull` dan menjalankan container dalam hitungan detik.
 
 ---
 
-## 2. Deploy via GitHub Actions (Coolify Tidak Auto-Deploy Sendiri)
+## 1. Alur Kerja (Workflow)
 
-Agar Coolify **tidak ikut deploy otomatis** setiap ada push biasa, melainkan dikendalikan melalui **GitHub Actions**:
-
-### A. Nonaktifkan Auto-Deploy di Dashboard Coolify
-1. Buka dashboard Coolify -> Pilih project **Bacco Backend**.
-2. Masuk ke tab **Configuration** / **General**.
-3. **Matikan (Uncheck)** opsi **"Auto Deploy"** (atau "Autodeploy via Webhook").
-4. Simpan perubahan. Sekarang Coolify hanya akan melakukan deployment jika menerima trigger API / Webhook manual.
-
-### B. Konfigurasi Secret di GitHub Repository
-1. Buka repository GitHub `bacco-backend` -> **Settings** -> **Secrets and variables** -> **Actions**.
-2. Klik **New repository secret**.
-3. Masukkan:
-   - **Name**: `COOLIFY_DEPLOY_SECRET`
-   - **Value**: Masukkan API Token / Secret Coolify Anda.
-
-### C. Alur Kerja GitHub Actions (`.github/workflows/deploy.yml`)
-Setiap kali ada push ke branch `master` (atau dipicu manual via `workflow_dispatch`), GitHub Actions akan memanggil webhook Coolify:
+```mermaid
+flowchart LR
+    A[git push master] --> B[GitHub Actions]
+    B --> C[Build Docker Image di Cloud GitHub]
+    C --> D[Push Image ke ghcr.io]
+    D --> E[Trigger Webhook Coolify]
+    E --> F[Coolify VPS: docker pull & run]
 ```
-https://coolify.phoenixtech.web.id/api/v1/deploy?uuid=pq7c1alsxtbzru2iyhbl1kcv&force=false
-```
-Dengan header `Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_SECRET }}`.
+
+1. Anda melakukan `git push origin master`.
+2. **GitHub Actions** (`.github/workflows/deploy.yml`) otomatis berjalan:
+   - Mengambil source code.
+   - Melakukan `docker build` (Composer install, PHP extensions, Nginx, dll) menggunakan CPU/RAM milik GitHub (gratis 2 Core CPU & 7GB RAM).
+   - Mem-push image yang sudah jadi ke **GitHub Container Registry (`ghcr.io/wildan190/bacco-backend:latest`)**.
+3. Setelah push image selesai, GitHub Actions memanggil webhook API Coolify.
+4. **Coolify di VPS hanya mendownload (pull) image yang sudah jadi lalu me-restart container**.
+   - Waktu deploy di VPS: **< 10 detik**.
+   - Beban CPU VPS: **0% (tidak ada compile PHP/Composer di VPS)**.
+   - Beban RAM VPS saat deploy: **0 MB lonjakan**.
 
 ---
 
-## 3. Spesifikasi File Konfigurasi Baru
+## 2. Pengaturan di Coolify
 
-1. **`docker/php.ini`**:
-   - `memory_limit = 128M`
-   - `opcache.memory_consumption = 64`
-   - `max_execution_time = 60`
-2. **`docker/www.conf`**:
-   - PHP-FPM pool `ondemand` (hanya aktif saat ada request, 0MB saat idle).
-   - Max 4 children processes.
-3. **`docker/supervisord.conf`**:
-   - 1 Worker Queue (`numprocs=1`).
-   - Memory limit 64MB dan istirahat 1 detik tiap job selesai (`--rest=1`).
-4. **`docker-compose.yml`**:
-   - Redis dikunci `--maxmemory 48mb --maxmemory-policy allkeys-lru --save ""`.
-   - Resource limits: App CPU 0.70 / RAM 450M, Redis CPU 0.15 / RAM 64M.
-5. **`.github/workflows/deploy.yml`**:
-   - Otomatis trigger Coolify webhook hanya melalui GitHub Actions.
+Agar Coolify **tidak pernah mencoba build dari Dockerfile**:
+
+### Jika menggunakan tipe "Docker Compose":
+Di `docker-compose.yml`, service `app` sudah diarahkan langsung ke image:
+```yaml
+services:
+  app:
+    image: ghcr.io/wildan190/bacco-backend:latest
+```
+Coolify otomatis hanya menjalankan `docker compose pull && docker compose up -d`.
+
+### Jika menggunakan tipe "Application" di Coolify:
+1. Buka resource aplikasi di Coolify.
+2. Pada bagian **Build Pack**, pilih **Docker Image** (bukan Dockerfile / Nixpacks).
+3. Masukkan nama image:
+   ```
+   ghcr.io/wildan190/bacco-backend:latest
+   ```
+
+---
+
+## 3. Pengaturan Autodeploy & GitHub Container Registry
+
+### A. Matikan Webhook Otomatis di GitHub Repo
+Agar Coolify tidak langsung deploy saat push biasa (harus menunggu build di GitHub Actions selesai dulu):
+1. Buka repo GitHub: [github.com/wildan190/bacco-backend](https://github.com/wildan190/bacco-backend)
+2. Masuk ke **Settings** -> **Webhooks**.
+3. Jika ada webhook bawaan yang mengarah ke `coolify.phoenixtech.web.id`, **hapus / uncheck event push**.
+4. Di Dashboard Coolify, pastikan opsi **Auto Deploy** posisi **OFF**.
+
+### B. Pastikan Package GHCR Dapat Ditarik oleh Coolify
+Secara default, paket baru di GitHub Packages (`ghcr.io`) mungkin berstatus *Private*.
+Agar Coolify bisa pull tanpa kendala:
+- **Opsi 1 (Paling Mudah)**: Setelah build pertama di GitHub Actions selesai, buka repo GitHub -> klik **Packages** (di kanan halaman repo) -> pilih `bacco-backend` -> **Package Settings** -> ubah visibility menjadi **Public**.
+- **Opsi 2**: Atau di Coolify menu **Settings -> Docker Registries**, tambahkan `ghcr.io` dengan username GitHub dan Personal Access Token (PAT).
+
+---
+
+## 4. Alokasi Resource Runtime (Terkunci Sesuai Permintaan)
+
+- **Total RAM**: Terkunci **< 700MB** (App 450MB + Redis 64MB).
+- **Total CPU**: Terkunci **< 1.0 Core** (Max 0.70 Core di App).
+- **Queue Worker**: 1 Worker (`numprocs=1`), istirahat 1 detik tiap job (`--rest=1`), memory limit 64MB.
+- **Redis**: Dibatasi `--maxmemory 48mb` dan policy `allkeys-lru` (RDB snapshot dimatikan agar hemat memori).

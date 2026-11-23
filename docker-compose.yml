@@ -1,8 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/wildan190/bacco-backend:latest
     container_name: bacco-backend
     restart: unless-stopped
     env_file:
