@@ -1,100 +1,64 @@
-# Panduan Deploy Bacco Backend di Coolify
+# Panduan Deploy Bacco Backend di Coolify & GitHub Actions
 
-Backend Laravel 11 ini telah dikonfigurasi penuh untuk di-deploy ke **Coolify** menggunakan Docker / Docker Compose.
-
----
-
-## 1. Spesifikasi Container
-* **Base Image**: PHP 8.3 FPM Alpine (sangat ringan & aman)
-* **Web Server**: Nginx (port 80)
-* **Process Manager**: Supervisord (menjalankan Nginx, PHP-FPM, dan Laravel Queue Worker secara otomatis)
-* **Ekstensi PHP Terpasang**: `pdo_mysql`, `gd` (support webp, jpeg, freetype), `exif`, `bcmath`, `zip`, `opcache`, `pcntl`, `intl`
-* **Queue Worker**: Menggunakan driver Redis bawaan (tanpa perlu Horizon) untuk background jobs (sinkronisasi foto ke S3 & cache Redis)
-* **Health Check**: Endpoint bawaan `/up`
+Backend Laravel 11 ini telah dikonfigurasi penuh untuk di-deploy ke **Coolify** menggunakan Docker / Docker Compose dengan batasan resource ketat (**RAM < 700MB, CPU < 1 Core, Redis hemat memory, dan Queue 1 worker**).
 
 ---
 
-## 2. Cara Deploy di Coolify
+## 1. Alokasi Resource & Optimasi Performa
 
-### Opsi A: Deploy sebagai Application (Rekomendasi jika MySQL & Redis terpisah di Coolify)
-1. Di Dashboard Coolify, klik **+ Add Resource** -> **Application** -> **Public/Private Git Repository**.
-2. Masukkan URL repository git dan tentukan subdirektori (jika monorepo): `bacco-backend`.
-3. Pilih **Build Pack**: **Dockerfile**.
-4. **Port**: Isi dengan `80`.
-5. **Domain**: Masukkan domain production:
-   ```
-   https://api-bacco.phoenixtech.web.id
-   ```
-6. Masukkan **Environment Variables** (lihat bagian 3 di bawah).
-7. Klik **Deploy**.
+Stack ini dikunci agar **RAM tidak pernah tembus 700MB** dan **CPU tidak melebihi 1 Core**:
 
----
-
-### Opsi B: Deploy sebagai Docker Compose (Jika MySQL & Redis ingin dalam 1 stack)
-1. Di Dashboard Coolify, klik **+ Add Resource** -> **Docker Compose**.
-2. Arahkan ke file `docker-compose.yml`.
-3. Masukkan Environment Variables dan tentukan domain pada service `app`.
-4. Klik **Deploy**.
+| Komponen | Batasan RAM | Batasan CPU | Optimasi Khusus |
+|---|---|---|---|
+| **PHP-FPM** | ~40MB - 120MB | Max 0.7 Core (shared) | Pool mode `ondemand` (max 4 children), timeout idle 10s otomatis dibunuh jika tidak ada request. Memory limit script 128MB. |
+| **OPcache** | 64MB | - | Memory consumption dipangkas dari 128MB ke 64MB (cukup untuk seluruh route & class Laravel 11). CLI OPcache dimatikan. |
+| **Nginx** | ~10MB | < 0.05 Core | Event epoll, worker processes auto, fastcgi buffer efisien. |
+| **Laravel Queue** | Max 64MB | < 0.15 Core | **1 Worker saja** (`numprocs=1`), opsi `--sleep=3 --rest=1 --memory=64 --max-jobs=100` agar CPU tidak spike dan memory leak ter-recycle berkala. |
+| **Redis** | Max 48MB | Max 0.15 Core | `--maxmemory 48mb`, policy `allkeys-lru` (auto hapus cache usang saat penuh), snapshot disk RDB dimatikan (`--save ""`) untuk mencegah forking memory 2x lipat. |
+| **Container Hard Limits** | **450MB (App) + 64MB (Redis)** | **Max 0.70 Core (App)** | Dibatasi via Docker Compose `deploy.resources.limits`. |
 
 ---
 
-## 3. Environment Variables Wajib di Coolify
+## 2. Deploy via GitHub Actions (Coolify Tidak Auto-Deploy Sendiri)
 
-Salin variabel berikut ke menu **Environment Variables** di Coolify:
+Agar Coolify **tidak ikut deploy otomatis** setiap ada push biasa, melainkan dikendalikan melalui **GitHub Actions**:
 
-```env
-APP_NAME="Bacco Sales API"
-APP_ENV=production
-APP_KEY=base64:OGth0tQGzl4SbKoBe4rHAu8UGossysxfmJmw/dsdQnk=
-APP_DEBUG=false
-APP_URL=https://api-bacco.phoenixtech.web.id
+### A. Nonaktifkan Auto-Deploy di Dashboard Coolify
+1. Buka dashboard Coolify -> Pilih project **Bacco Backend**.
+2. Masuk ke tab **Configuration** / **General**.
+3. **Matikan (Uncheck)** opsi **"Auto Deploy"** (atau "Autodeploy via Webhook").
+4. Simpan perubahan. Sekarang Coolify hanya akan melakukan deployment jika menerima trigger API / Webhook manual.
 
-APP_LOCALE=id
-APP_FALLBACK_LOCALE=en
+### B. Konfigurasi Secret di GitHub Repository
+1. Buka repository GitHub `bacco-backend` -> **Settings** -> **Secrets and variables** -> **Actions**.
+2. Klik **New repository secret**.
+3. Masukkan:
+   - **Name**: `COOLIFY_DEPLOY_SECRET`
+   - **Value**: Masukkan API Token / Secret Coolify Anda.
 
-LOG_CHANNEL=stack
-LOG_STACK=single
-LOG_LEVEL=info
-
-# Database (Sesuaikan dengan kredensial MySQL di Coolify)
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=db_bacco_sales_track_app
-DB_USERNAME=root
-DB_PASSWORD=
-
-# Session, Cache & Queue (Redis)
-SESSION_DRIVER=database
-SESSION_LIFETIME=120
-CACHE_STORE=redis
-QUEUE_CONNECTION=redis
-
-# Redis (Sesuaikan dengan host service Redis di Coolify)
-REDIS_CLIENT=predis
-REDIS_HOST=127.0.0.1
-REDIS_PASSWORD=null
-REDIS_PORT=6379
-
-# Object Storage S3 (Neva Objects)
-FILESYSTEM_DISK=s3
-AWS_ACCESS_KEY_ID=IEGGKPLA14XPJHR2AZZV
-AWS_SECRET_ACCESS_KEY=1gabnDE08W1VoeLfXuVEkzPx6J4aXbQp7HLJJcgY
-AWS_DEFAULT_REGION=us-east-1
-AWS_BUCKET=huntr-dev
-AWS_ENDPOINT=https://s3.nevaobjects.id
-AWS_USE_PATH_STYLE_ENDPOINT=true
-
-# Otomatis migrate database saat container startup
-RUN_MIGRATIONS=true
+### C. Alur Kerja GitHub Actions (`.github/workflows/deploy.yml`)
+Setiap kali ada push ke branch `master` (atau dipicu manual via `workflow_dispatch`), GitHub Actions akan memanggil webhook Coolify:
 ```
+https://coolify.phoenixtech.web.id/api/v1/deploy?uuid=pq7c1alsxtbzru2iyhbl1kcv&force=false
+```
+Dengan header `Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_SECRET }}`.
 
 ---
 
-## 4. Fitur Otomatis Saat Startup (`docker/entrypoint.sh`)
-Setiap kali container dijalankan / redeploy:
-1. Otomatis membuat folder penyimpanan dan permission `storage` & `bootstrap/cache` (`775` www-data).
-2. Otomatis menjalankan `php artisan storage:link`.
-3. Otomatis menjalankan migrasi database: `php artisan migrate --force` (jika `RUN_MIGRATIONS=true`).
-4. Otomatis optimasi performa: `config:cache`, `route:cache`, dan `view:cache`.
-5. Supervisord menjalankan web server Nginx + PHP-FPM + 2 worker `queue:work redis` secara terus-menerus.
+## 3. Spesifikasi File Konfigurasi Baru
+
+1. **`docker/php.ini`**:
+   - `memory_limit = 128M`
+   - `opcache.memory_consumption = 64`
+   - `max_execution_time = 60`
+2. **`docker/www.conf`**:
+   - PHP-FPM pool `ondemand` (hanya aktif saat ada request, 0MB saat idle).
+   - Max 4 children processes.
+3. **`docker/supervisord.conf`**:
+   - 1 Worker Queue (`numprocs=1`).
+   - Memory limit 64MB dan istirahat 1 detik tiap job selesai (`--rest=1`).
+4. **`docker-compose.yml`**:
+   - Redis dikunci `--maxmemory 48mb --maxmemory-policy allkeys-lru --save ""`.
+   - Resource limits: App CPU 0.70 / RAM 450M, Redis CPU 0.15 / RAM 64M.
+5. **`.github/workflows/deploy.yml`**:
+   - Otomatis trigger Coolify webhook hanya melalui GitHub Actions.

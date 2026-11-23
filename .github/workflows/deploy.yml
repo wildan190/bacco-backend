@@ -1,0 +1,37 @@
+name: Deploy to Coolify
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Trigger Coolify Webhook
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Deployment via Coolify Webhook
+        env:
+          COOLIFY_SECRET: ${{ secrets.COOLIFY_DEPLOY_SECRET }}
+        run: |
+          echo "🚀 Triggering deployment on Coolify..."
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "https://coolify.phoenixtech.web.id/api/v1/deploy?uuid=pq7c1alsxtbzru2iyhbl1kcv&force=false" \
+            -H "Authorization: Bearer ${COOLIFY_SECRET}" \
+            -H "Accept: application/json" \
+            -H "Content-Type: application/json")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "Status Code: $HTTP_CODE"
+          echo "Response Body: $BODY"
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "✅ Deployment berhasil di-trigger di Coolify!"
+          else
+            echo "❌ Gagal memicu deployment Coolify (HTTP $HTTP_CODE)"
+            exit 1
+          fi

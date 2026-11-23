@@ -54,6 +54,7 @@ RUN mkdir -p storage/framework/cache/data \
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/supervisord.conf /etc/supervisord.conf
 COPY docker/php.ini /usr/local/etc/php/conf.d/99-custom.ini
+COPY docker/www.conf /usr/local/etc/php-fpm.d/zz-custom-pool.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh

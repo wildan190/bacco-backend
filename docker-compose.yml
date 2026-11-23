@@ -38,6 +38,14 @@ services:
       AWS_ENDPOINT: "${AWS_ENDPOINT:-https://s3.nevaobjects.id}"
       AWS_USE_PATH_STYLE_ENDPOINT: "true"
       RUN_MIGRATIONS: "true"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.70'
+          memory: 450M
+        reservations:
+          cpus: '0.10'
+          memory: 100M
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://127.0.0.1/up || exit 1"]
       interval: 10s
@@ -54,6 +62,15 @@ services:
     image: public.ecr.aws/docker/library/mysql:8.0
     container_name: bacco-mysql
     restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password --innodb-buffer-pool-size=128M --innodb-log-buffer-size=16M --max-connections=30
+    deploy:
+      resources:
+        limits:
+          cpus: '0.40'
+          memory: 220M
+        reservations:
+          cpus: '0.10'
+          memory: 100M
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD:-bacco_root_secret} || exit 1"]
       interval: 10s
@@ -74,6 +91,15 @@ services:
     image: public.ecr.aws/docker/library/redis:alpine
     container_name: bacco-redis
     restart: unless-stopped
+    command: redis-server --maxmemory 48mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    deploy:
+      resources:
+        limits:
+          cpus: '0.15'
+          memory: 64M
+        reservations:
+          cpus: '0.05'
+          memory: 16M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
