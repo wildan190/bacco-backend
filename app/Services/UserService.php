@@ -9,13 +9,20 @@ use Illuminate\Database\Eloquent\Collection;
 class UserService
 {
     /**
-     * Get paginated or list of sales users.
+     * Get paginated or list of sales/admin users scoped to creator admin.
      *
      * @param  array{role?: string, search?: string, per_page?: int}  $filters
      */
-    public function getUsers(array $filters = []): LengthAwarePaginator
+    public function getUsers(array $filters = [], ?User $currentUser = null): LengthAwarePaginator
     {
         $query = User::query();
+
+        if ($currentUser && $currentUser->isAdmin()) {
+            $query->where(function ($q) use ($currentUser) {
+                $q->where('admin_id', $currentUser->id)
+                  ->orWhere('id', $currentUser->id);
+            });
+        }
 
         if (! empty($filters['role'])) {
             $query->where('role', $filters['role']);
@@ -34,16 +41,20 @@ class UserService
     }
 
     /**
-     * Get all active sales users (for dropdowns / target assignments).
+     * Get all active sales users for current admin (for dropdowns / target assignments).
      *
      * @return Collection<int, User>
      */
-    public function getSalesUsers(): Collection
+    public function getSalesUsers(?User $currentUser = null): Collection
     {
-        return User::where('role', 'sales')
-            ->where('is_active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'email', 'phone', 'role']);
+        $query = User::where('role', 'sales')
+            ->where('is_active', true);
+
+        if ($currentUser && $currentUser->isAdmin()) {
+            $query->where('admin_id', $currentUser->id);
+        }
+
+        return $query->orderBy('name')->get(['id', 'name', 'email', 'phone', 'role', 'admin_id']);
     }
 
     /**
@@ -51,14 +62,22 @@ class UserService
      *
      * @param  array{name: string, email: string, phone: string, password: string, role?: string}  $data
      */
-    public function createUser(array $data): User
+    public function createUser(array $data, ?User $creator = null): User
     {
+        $role = $data['role'] ?? 'sales';
+        $adminId = null;
+
+        if ($role === 'sales' && $creator && $creator->isAdmin()) {
+            $adminId = $creator->id;
+        }
+
         return User::create([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'phone' => $data['phone'],
-            'password' => $data['password'],
-            'role' => $data['role'] ?? 'sales',
+            'name'      => $data['name'],
+            'email'     => $data['email'],
+            'phone'     => $data['phone'],
+            'password'  => $data['password'],
+            'role'      => $role,
+            'admin_id'  => $adminId,
             'is_active' => true,
         ]);
     }

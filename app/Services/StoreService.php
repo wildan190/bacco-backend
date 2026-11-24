@@ -27,18 +27,27 @@ class StoreService
         $query = Store::query()
             ->with(['latestVisit.user:id,name,phone', 'assignedSales:id,name']);
 
-        // ── Sales scoping: hanya tampilkan toko yang di-assign atau dijadwalkan hari ini ──
-        if ($currentUser && $currentUser->isSales()) {
-            $userId = $currentUser->id;
-            $today  = now()->toDateString();
+        // ── Admin / Sales Multi-Tenant Scoping ──
+        if ($currentUser) {
+            if ($currentUser->isAdmin()) {
+                $query->where('admin_id', $currentUser->id);
+            } elseif ($currentUser->isSales()) {
+                $userId  = $currentUser->id;
+                $adminId = $currentUser->admin_id;
+                $today   = now()->toDateString();
 
-            $query->where(function ($q) use ($userId, $today) {
-                $q->where('assigned_sales_id', $userId)
-                  ->orWhereHas('visitSchedules', function ($sq) use ($userId, $today) {
-                      $sq->where('user_id', $userId)
-                         ->whereDate('scheduled_date', $today);
-                  });
-            });
+                if ($adminId) {
+                    $query->where('admin_id', $adminId);
+                }
+
+                $query->where(function ($q) use ($userId, $today) {
+                    $q->where('assigned_sales_id', $userId)
+                      ->orWhereHas('visitSchedules', function ($sq) use ($userId, $today) {
+                          $sq->where('user_id', $userId)
+                             ->whereDate('scheduled_date', $today);
+                      });
+                });
+            }
         }
         // ───────────────────────────────────────────────────────────────────────────────────
 
@@ -99,6 +108,7 @@ class StoreService
                 'assigned_sales_id'=> $assignedSalesId,
                 'schedule_frequency' => $isDaily ? 'daily' : null,
                 'created_by'       => $creator?->id,
+                'admin_id'         => $creator ? ($creator->isAdmin() ? $creator->id : $creator->admin_id) : null,
                 'is_active'        => true,
             ];
 

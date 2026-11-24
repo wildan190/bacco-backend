@@ -24,6 +24,7 @@ class User extends Authenticatable
         'email',
         'phone',
         'role',
+        'admin_id',
         'password',
         'is_active',
     ];
@@ -98,5 +99,21 @@ class User extends Authenticatable
     public function visitSchedules(): HasMany
     {
         return $this->hasMany(VisitSchedule::class, 'user_id');
+    }
+
+    /**
+     * Admin parent for sales users.
+     */
+    public function admin(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'admin_id');
+    }
+
+    /**
+     * Sales users managed by this admin.
+     */
+    public function salesUsers(): HasMany
+    {
+        return $this->hasMany(User::class, 'admin_id');
     }
 }

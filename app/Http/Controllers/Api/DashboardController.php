@@ -24,8 +24,8 @@ class DashboardController extends Controller
         $month = (int) $request->query('month', Carbon::now()->month);
         $year = (int) $request->query('year', Carbon::now()->year);
 
-        $summary = $this->revenueKpiService->getAdminRevenueSummary($month, $year);
-        $salesBreakdown = $this->revenueKpiService->getSalesRevenueBreakdown($month, $year);
+        $summary = $this->revenueKpiService->getAdminRevenueSummary($month, $year, $request->user());
+        $salesBreakdown = $this->revenueKpiService->getSalesRevenueBreakdown($month, $year, $request->user());
 
         return response()->json([
             'summary' => $summary,
@@ -53,7 +53,7 @@ class DashboardController extends Controller
      */
     public function saveTarget(StoreTargetRequest $request): JsonResponse
     {
-        $target = $this->revenueKpiService->saveTarget($request->validated());
+        $target = $this->revenueKpiService->saveTarget($request->validated(), $request->user());
 
         return response()->json([
             'message' => 'Target sales berhasil disimpan.',
@@ -69,7 +69,7 @@ class DashboardController extends Controller
         $month = (int) $request->query('month', Carbon::now()->month);
         $year = (int) $request->query('year', Carbon::now()->year);
 
-        $targets = $this->revenueKpiService->getTargets($month, $year);
+        $targets = $this->revenueKpiService->getTargets($month, $year, $request->user());
 
         return response()->json([
             'targets' => $targets,

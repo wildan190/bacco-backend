@@ -32,7 +32,7 @@ class ProductController extends Controller
             'is_active' => $request->has('is_active') ? $request->boolean('is_active') : null,
             'per_page' => (int) $request->query('per_page', 20),
             'all' => $request->boolean('all'),
-        ]);
+        ], $request->user());
 
         return ProductResource::collection($products);
     }

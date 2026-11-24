@@ -12,6 +12,7 @@ class SalesTarget extends Model
 
     protected $fillable = [
         'user_id',
+        'admin_id',
         'period_month',
         'period_year',
         'target_revenue',

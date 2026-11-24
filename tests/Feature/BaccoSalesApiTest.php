@@ -877,4 +877,57 @@ class BaccoSalesApiTest extends TestCase
         $this->assertEquals(1, StoreVisit::where('client_uuid', $visitUuid)->count());
         $this->assertEquals(1, Order::where('client_uuid', $orderUuid)->count());
     }
+
+    /** @test */
+    public function test_multi_admin_rbac_data_isolation(): void
+    {
+        // 1. Admin 1 creates Admin 2
+        $admin2Res = $this->actingAs($this->admin, 'sanctum')
+            ->postJson('/api/admin/users', [
+                'name'     => 'Admin Two',
+                'email'    => 'admin2@bacco.test',
+                'phone'    => '081299990000',
+                'password' => 'password123',
+                'role'     => 'admin',
+            ]);
+        $admin2Res->assertStatus(201);
+        $admin2Id = $admin2Res->json('user.id');
+        $admin2 = User::find($admin2Id);
+
+        // 2. Admin 2 creates a store & a product under Admin 2 tenant scope
+        $store2Res = $this->actingAs($admin2, 'sanctum')
+            ->postJson('/api/stores', [
+                'name'    => 'Toko Admin 2',
+                'address' => 'Jl. Admin 2 No. 88',
+            ]);
+        $store2Res->assertStatus(201);
+        $store2Id = $store2Res->json('store.id');
+
+        $prod2Res = $this->actingAs($admin2, 'sanctum')
+            ->postJson('/api/products', [
+                'name'  => 'Rokok Admin 2',
+                'price' => 25000,
+                'initial_stock' => 10,
+            ]);
+        $prod2Res->assertStatus(201);
+        $prod2Id = $prod2Res->json('product.id');
+
+        // 3. Admin 1 checks stores and products list: must NOT see Admin 2's store or product!
+        $admin1Stores = $this->actingAs($this->admin, 'sanctum')->getJson('/api/stores?all=1');
+        $admin1Stores->assertStatus(200);
+        $admin1StoreIds = collect($admin1Stores->json('data'))->pluck('id');
+        $this->assertFalse($admin1StoreIds->contains($store2Id));
+
+        $admin1Prods = $this->actingAs($this->admin, 'sanctum')->getJson('/api/products?all=1');
+        $admin1Prods->assertStatus(200);
+        $admin1ProdIds = collect($admin1Prods->json('data'))->pluck('id');
+        $this->assertFalse($admin1ProdIds->contains($prod2Id));
+
+        // 4. Admin 2 checks stores and products list: sees ONLY Admin 2's store & product
+        $admin2Stores = $this->actingAs($admin2, 'sanctum')->getJson('/api/stores?all=1');
+        $admin2Stores->assertStatus(200);
+        $admin2StoreIds = collect($admin2Stores->json('data'))->pluck('id');
+        $this->assertTrue($admin2StoreIds->contains($store2Id));
+        $this->assertFalse($admin2StoreIds->contains($this->store->id));
+    }
 }

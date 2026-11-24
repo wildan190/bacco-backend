@@ -19,10 +19,18 @@ class ProductService
      * @param  array{search?: string, in_stock?: bool, is_active?: bool, per_page?: int, all?: bool}  $filters
      * @return LengthAwarePaginator|Collection<int, Product>
      */
-    public function getProducts(array $filters = []): LengthAwarePaginator|Collection
+    public function getProducts(array $filters = [], ?User $currentUser = null): LengthAwarePaginator|Collection
     {
         $query = Product::query()
             ->with(['availableBarcodes:id,product_id,barcode,status']);
+
+        if ($currentUser) {
+            if ($currentUser->isAdmin()) {
+                $query->where('admin_id', $currentUser->id);
+            } elseif ($currentUser->isSales() && $currentUser->admin_id) {
+                $query->where('admin_id', $currentUser->admin_id);
+            }
+        }
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];
@@ -94,12 +102,13 @@ class ProductService
             }
 
             $product = Product::create([
-                'name' => $data['name'],
-                'sku' => $sku,
+                'name'        => $data['name'],
+                'sku'         => $sku,
                 'description' => $data['description'] ?? null,
-                'price' => $data['price'],
-                'stock' => $initialStock,
-                'is_active' => true,
+                'price'       => $data['price'],
+                'stock'       => $initialStock,
+                'admin_id'    => $creator ? ($creator->isAdmin() ? $creator->id : $creator->admin_id) : null,
+                'is_active'   => true,
             ]);
 
             // If manual barcode list passed

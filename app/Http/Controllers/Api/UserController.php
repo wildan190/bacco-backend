@@ -19,7 +19,7 @@ class UserController extends Controller
     ) {}
 
     /**
-     * List users (Admin only).
+     * List users (Admin only, scoped to admin tenant).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -27,7 +27,7 @@ class UserController extends Controller
             'role' => $request->query('role'),
             'search' => $request->query('search'),
             'per_page' => (int) $request->query('per_page', 15),
-        ]);
+        ], $request->user());
 
         return UserResource::collection($users);
     }
@@ -35,9 +35,9 @@ class UserController extends Controller
     /**
      * List sales users for dropdowns/assignments.
      */
-    public function salesList(): AnonymousResourceCollection
+    public function salesList(Request $request): AnonymousResourceCollection
     {
-        $sales = $this->userService->getSalesUsers();
+        $sales = $this->userService->getSalesUsers($request->user());
 
         return UserResource::collection($sales);
     }
@@ -47,7 +47,7 @@ class UserController extends Controller
      */
     public function store(CreateSalesUserRequest $request): JsonResponse
     {
-        $user = $this->userService->createUser($request->validated());
+        $user = $this->userService->createUser($request->validated(), $request->user());
 
         return response()->json([
             'message' => 'User berhasil didaftarkan.',

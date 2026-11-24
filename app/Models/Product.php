@@ -16,6 +16,7 @@ class Product extends Model
         'description',
         'price',
         'stock',
+        'admin_id',
         'is_active',
     ];
 
@@ -41,5 +42,10 @@ class Product extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class, 'product_id');
+    }
+
+    public function admin(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'admin_id');
     }
 }

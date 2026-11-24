@@ -25,6 +25,7 @@ class Store extends Model
         'assigned_sales_id',
         'schedule_frequency',
         'created_by',
+        'admin_id',
         'is_active',
     ];
 
@@ -42,6 +43,11 @@ class Store extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function admin(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'admin_id');
     }
 
     public function assignedSales(): BelongsTo

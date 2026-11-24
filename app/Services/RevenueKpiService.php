@@ -25,11 +25,32 @@ class RevenueKpiService
      *     total_visits: int
      * }
      */
-    public function getAdminRevenueSummary(int $month, int $year): array
+    public function getAdminRevenueSummary(int $month, int $year, ?User $admin = null): array
     {
-        $ordersStats = Order::where('status', 'completed')
+        $salesUserIds = $admin
+            ? User::where('role', 'sales')->where('admin_id', $admin->id)->pluck('id')->all()
+            : [];
+
+        $ordersQuery = Order::where('status', 'completed')
             ->whereMonth('created_at', $month)
-            ->whereYear('created_at', $year)
+            ->whereYear('created_at', $year);
+
+        $targetsQuery = SalesTarget::where('period_month', $month)
+            ->where('period_year', $year);
+
+        $visitsQuery = StoreVisit::whereMonth('visited_at', $month)
+            ->whereYear('visited_at', $year);
+
+        if ($admin) {
+            $ordersQuery->whereIn('user_id', $salesUserIds);
+            $targetsQuery->where(function ($q) use ($admin, $salesUserIds) {
+                $q->where('admin_id', $admin->id)
+                  ->orWhereIn('user_id', $salesUserIds);
+            });
+            $visitsQuery->whereIn('user_id', $salesUserIds);
+        }
+
+        $ordersStats = $ordersQuery
             ->selectRaw('COALESCE(SUM(total_amount), 0) as total_revenue, COUNT(id) as total_orders')
             ->first();
 
@@ -37,17 +58,13 @@ class RevenueKpiService
         $totalOrders = (int) ($ordersStats->total_orders ?? 0);
         $averageOrderValue = $totalOrders > 0 ? round($totalRevenue / $totalOrders, 2) : 0.0;
 
-        $totalTargetRevenue = (float) SalesTarget::where('period_month', $month)
-            ->where('period_year', $year)
-            ->sum('target_revenue');
+        $totalTargetRevenue = (float) $targetsQuery->sum('target_revenue');
 
         $achievementPercentage = $totalTargetRevenue > 0
             ? round(($totalRevenue / $totalTargetRevenue) * 100, 2)
             : 0.0;
 
-        $totalVisits = (int) StoreVisit::whereMonth('visited_at', $month)
-            ->whereYear('visited_at', $year)
-            ->count();
+        $totalVisits = (int) $visitsQuery->count();
 
         return [
             'period_month' => $month,
@@ -79,12 +96,17 @@ class RevenueKpiService
      *     kpi_score: float
      * }>
      */
-    public function getSalesRevenueBreakdown(int $month, int $year): array
+    public function getSalesRevenueBreakdown(int $month, int $year, ?User $admin = null): array
     {
-        // 1. Fetch all sales users
-        $salesUsers = User::where('role', 'sales')
-            ->where('is_active', true)
-            ->get(['id', 'name', 'email', 'phone']);
+        // 1. Fetch all sales users belonging to this admin
+        $salesQuery = User::where('role', 'sales')
+            ->where('is_active', true);
+
+        if ($admin) {
+            $salesQuery->where('admin_id', $admin->id);
+        }
+
+        $salesUsers = $salesQuery->get(['id', 'name', 'email', 'phone']);
 
         if ($salesUsers->isEmpty()) {
             return [];
@@ -264,7 +286,7 @@ class RevenueKpiService
      *
      * @param  array{user_id: int, period_month: int, period_year: int, target_revenue: float, target_visits: int, notes?: string|null}  $data
      */
-    public function saveTarget(array $data): SalesTarget
+    public function saveTarget(array $data, ?User $admin = null): SalesTarget
     {
         return SalesTarget::updateOrCreate(
             [
@@ -275,6 +297,7 @@ class RevenueKpiService
             [
                 'target_revenue' => $data['target_revenue'],
                 'target_visits' => $data['target_visits'],
+                'admin_id' => $admin?->id,
                 'notes' => $data['notes'] ?? null,
             ]
         )->load('user:id,name,email,phone');
@@ -283,12 +306,16 @@ class RevenueKpiService
     /**
      * List all targets for a given period.
      */
-    public function getTargets(int $month, int $year): array
+    public function getTargets(int $month, int $year, ?User $admin = null): array
     {
-        return SalesTarget::with('user:id,name,email,phone')
+        $query = SalesTarget::with('user:id,name,email,phone')
             ->where('period_month', $month)
-            ->where('period_year', $year)
-            ->get()
-            ->toArray();
+            ->where('period_year', $year);
+
+        if ($admin) {
+            $query->where('admin_id', $admin->id);
+        }
+
+        return $query->get()->toArray();
     }
 }
