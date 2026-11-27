@@ -69,8 +69,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sales/inventory/products', [SalesInventoryController::class, 'posProducts'])->name('sales.inventory.pos-products');
     Route::get('/sales/inventory/history', [SalesInventoryController::class, 'history'])->name('sales.inventory.history');
 
-    // Admin Exclusive Routes
-    Route::middleware('role:admin')->group(function () {
+    // Admin & SuperAdmin Exclusive Routes
+    Route::middleware('role:admin,superadmin,super_admin')->group(function () {
         // User Management
         Route::get('/admin/sales-users', [UserController::class, 'salesList'])->name('admin.sales-users');
         Route::apiResource('/admin/users', UserController::class)->names('admin.users');

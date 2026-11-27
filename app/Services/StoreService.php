@@ -29,7 +29,7 @@ class StoreService
 
         // ── Admin / Sales Multi-Tenant Scoping ──
         if ($currentUser) {
-            if ($currentUser->isAdmin()) {
+            if ($currentUser->isAdmin() && ! $currentUser->isSuperAdmin()) {
                 $query->where('admin_id', $currentUser->id);
             } elseif ($currentUser->isSales()) {
                 $userId  = $currentUser->id;

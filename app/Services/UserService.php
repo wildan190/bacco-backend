@@ -17,7 +17,7 @@ class UserService
     {
         $query = User::query();
 
-        if ($currentUser && $currentUser->isAdmin()) {
+        if ($currentUser && $currentUser->isAdmin() && ! $currentUser->isSuperAdmin()) {
             $query->where(function ($q) use ($currentUser) {
                 $q->where('admin_id', $currentUser->id)
                   ->orWhere('id', $currentUser->id);
@@ -50,7 +50,7 @@ class UserService
         $query = User::where('role', 'sales')
             ->where('is_active', true);
 
-        if ($currentUser && $currentUser->isAdmin()) {
+        if ($currentUser && $currentUser->isAdmin() && ! $currentUser->isSuperAdmin()) {
             $query->where('admin_id', $currentUser->id);
         }
 

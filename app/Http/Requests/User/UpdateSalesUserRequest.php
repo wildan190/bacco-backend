@@ -21,12 +21,16 @@ class UpdateSalesUserRequest extends FormRequest
             ? $this->route('user')->id
             : $this->route('user');
 
+        $allowedRoles = $this->user()?->isSuperAdmin()
+            ? 'superadmin,super_admin,admin,sales'
+            : 'admin,sales';
+
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => ['sometimes', 'required', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
             'phone' => ['sometimes', 'required', 'string', 'max:20'],
             'password' => ['nullable', 'string', 'min:6'],
-            'role' => ['sometimes', 'string', 'in:admin,sales'],
+            'role' => ['sometimes', 'string', "in:{$allowedRoles}"],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }

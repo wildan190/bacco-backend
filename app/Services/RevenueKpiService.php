@@ -27,8 +27,10 @@ class RevenueKpiService
      */
     public function getAdminRevenueSummary(int $month, int $year, ?User $admin = null): array
     {
-        $salesUserIds = $admin
-            ? User::where('role', 'sales')->where('admin_id', $admin->id)->pluck('id')->all()
+        $scopedAdmin = ($admin && ! $admin->isSuperAdmin()) ? $admin : null;
+
+        $salesUserIds = $scopedAdmin
+            ? User::where('role', 'sales')->where('admin_id', $scopedAdmin->id)->pluck('id')->all()
             : [];
 
         $ordersQuery = Order::where('status', 'completed')
@@ -41,10 +43,10 @@ class RevenueKpiService
         $visitsQuery = StoreVisit::whereMonth('visited_at', $month)
             ->whereYear('visited_at', $year);
 
-        if ($admin) {
+        if ($scopedAdmin) {
             $ordersQuery->whereIn('user_id', $salesUserIds);
-            $targetsQuery->where(function ($q) use ($admin, $salesUserIds) {
-                $q->where('admin_id', $admin->id)
+            $targetsQuery->where(function ($q) use ($scopedAdmin, $salesUserIds) {
+                $q->where('admin_id', $scopedAdmin->id)
                   ->orWhereIn('user_id', $salesUserIds);
             });
             $visitsQuery->whereIn('user_id', $salesUserIds);
@@ -102,7 +104,7 @@ class RevenueKpiService
         $salesQuery = User::where('role', 'sales')
             ->where('is_active', true);
 
-        if ($admin) {
+        if ($admin && ! $admin->isSuperAdmin()) {
             $salesQuery->where('admin_id', $admin->id);
         }
 
@@ -312,7 +314,7 @@ class RevenueKpiService
             ->where('period_month', $month)
             ->where('period_year', $year);
 
-        if ($admin) {
+        if ($admin && ! $admin->isSuperAdmin()) {
             $query->where('admin_id', $admin->id);
         }
 

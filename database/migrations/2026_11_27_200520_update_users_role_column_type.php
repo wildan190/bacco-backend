@@ -11,7 +11,9 @@ return new class extends Migration
     public function up(): void
     {
         // Mengubah kolom role menjadi VARCHAR(50) agar aman untuk data existing di production
-        DB::statement("ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'sales'");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'sales'");
+        }
     }
 
     /**
@@ -20,6 +22,8 @@ return new class extends Migration
     public function down(): void
     {
         // Rollback ke ENUM semula jika diperlukan
-        DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('sales', 'admin') NOT NULL DEFAULT 'sales'");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE users MODIFY COLUMN role ENUM('sales', 'admin') NOT NULL DEFAULT 'sales'");
+        }
     }
 };

@@ -930,4 +930,47 @@ class BaccoSalesApiTest extends TestCase
         $this->assertTrue($admin2StoreIds->contains($store2Id));
         $this->assertFalse($admin2StoreIds->contains($this->store->id));
     }
+
+    /** @test */
+    public function test_superadmin_can_list_all_users_and_manage_superadmin_role(): void
+    {
+        $superAdmin = User::factory()->create([
+            'name'     => 'Super Admin',
+            'email'    => 'superadmin@bacco.test',
+            'phone'    => '081111111111',
+            'role'     => 'superadmin',
+            'admin_id' => null,
+        ]);
+
+        // Superadmin can list all users (including admin and sales from other tenants)
+        $listRes = $this->actingAs($superAdmin, 'sanctum')->getJson('/api/admin/users');
+        $listRes->assertStatus(200);
+
+        $returnedIds = collect($listRes->json('data'))->pluck('id');
+        $this->assertTrue($returnedIds->contains($superAdmin->id));
+        $this->assertTrue($returnedIds->contains($this->admin->id));
+        $this->assertTrue($returnedIds->contains($this->sales1->id));
+        $this->assertTrue($returnedIds->contains($this->sales2->id));
+
+        // Superadmin can create another superadmin or admin
+        $createRes = $this->actingAs($superAdmin, 'sanctum')->postJson('/api/admin/users', [
+            'name'     => 'Second SuperAdmin',
+            'email'    => 'super2@bacco.test',
+            'phone'    => '081222222222',
+            'password' => 'password123',
+            'role'     => 'superadmin',
+        ]);
+        $createRes->assertStatus(201)
+            ->assertJsonPath('user.role', 'superadmin');
+
+        // Regular admin cannot create a superadmin
+        $forbiddenCreateRes = $this->actingAs($this->admin, 'sanctum')->postJson('/api/admin/users', [
+            'name'     => 'Fake SuperAdmin',
+            'email'    => 'fake@bacco.test',
+            'phone'    => '081333333333',
+            'password' => 'password123',
+            'role'     => 'superadmin',
+        ]);
+        $forbiddenCreateRes->assertStatus(422);
+    }
 }

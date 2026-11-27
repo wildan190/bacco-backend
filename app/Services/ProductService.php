@@ -25,7 +25,7 @@ class ProductService
             ->with(['availableBarcodes:id,product_id,barcode,status']);
 
         if ($currentUser) {
-            if ($currentUser->isAdmin()) {
+            if ($currentUser->isAdmin() && ! $currentUser->isSuperAdmin()) {
                 $query->where('admin_id', $currentUser->id);
             } elseif ($currentUser->isSales() && $currentUser->admin_id) {
                 $query->where('admin_id', $currentUser->admin_id);
